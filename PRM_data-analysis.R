@@ -10,29 +10,49 @@ library(stringr)
 library(ggplot2)
 library(tidyr)
 
-
-# Root directory to FragmentLab exports
-path <- "Y:/Leandro/2025/Nucleotidylation/Synthetic_peptides/AnnotatedSpectra/exports"
-
+# Define directory
 path_fig <- "Y:/Leandro/2025/Nucleotidylation/"
+path_exports <- "Y:/Leandro/2025/Nucleotidylation/Synthetic_peptides/AnnotatedSpectra/exports"
+
+# HCD, ETD & EThcD optimisation----
 
 # Find all .txt files recursively. These will contain intensity values for each fragment type (b, y, c, z, neutral losses, etc)
-txt_files <- dir_ls(path, recurse = TRUE, glob = "*.txt")
+txt_files <- dir_ls(path_exports, recurse = TRUE, glob = "*.txt")
 
 # Read .txt files into a list
 msms_list <- txt_files %>%
   set_names(path_ext_remove(path_file(.))) %>%  # name list elements by filename (without .txt)
   map(read_tsv)
 
-
-# 
+# Rename dfs with folder's name
 msms_list <- imap(msms_list, ~ .x %>% 
                     mutate(source = .y))
+
+# Remove rows of unidentified fragments
+msms_list <- lapply(msms_list, function(df) {
+  df[!is.na(df$`ion type`), ]
+})
+
+# Merge as a single df
+desired_cols <- c("intensity", "ion type", "ion loss", "source", "signal to noise")
+
+merged_msms <- msms_list %>%
+  lapply(function(df) df[, desired_cols, drop = FALSE]) %>%
+  bind_rows()
+
+
 
 
 # Load up the Spectra_meta.tsv. This contains spectrum scores and summary of dissociation conditions
 msms_tsv <- read.table("Y:/Leandro/2025/Nucleotidylation/Synthetic_peptides/AnnotatedSpectra/exports/Spectra_meta.tsv",
                        quote = NULL, check.names = FALSE, sep = "\t", header = TRUE)
+
+
+
+# Define ion series to be extracted from dfs
+series <- c("b", "y", "z", "c", "Precursor", "Diagnostic")
+
+
 
 
 # PRM-based quant in infected BV2 cells----
@@ -97,7 +117,7 @@ ggplot(prm, aes(x = Group, y = `Total Area Fragment`,
                 color = `Peptide Modified Sequence`)) +
                 #fill = `Peptide Modified Sequence`)) +
   geom_hline(data = lod_stats, aes(yintercept = lod, colour = `Peptide Modified Sequence`),
-    linetype = "dashed", linewidth = 0.1)  +
+    linetype = "dashed", linewidth = 0.3)  +
   #geom_text(data = lod_stats, aes(x = Inf, y = lod,
   #                                label = "LOD",
   #                                colour = `Peptide Modified Sequence`),
@@ -120,7 +140,7 @@ ggplot(prm, aes(x = Group, y = `Total Area Fragment`,
         legend.title = element_blank(),
         panel.grid.major.x = element_blank()) 
   
-ggsave(plot = last_plot(), filename = paste0(path_fig,"PRM_boxplot.png"),
+ggsave(plot = last_plot(), filename = paste0(path_fig,"PRM_boxplot.svg"),
        dpi = 300, width = 70, height = 70, units = "mm", bg = "white")
 
 ## Occupancy----
