@@ -40,17 +40,406 @@ merged_msms <- msms_list %>%
   lapply(function(df) df[, desired_cols, drop = FALSE]) %>%
   bind_rows()
 
-
-
-
 # Load up the Spectra_meta.tsv. This contains spectrum scores and summary of dissociation conditions
 msms_tsv <- read.table("Y:/Leandro/2025/Nucleotidylation/Synthetic_peptides/AnnotatedSpectra/exports/Spectra_meta.tsv",
                        quote = NULL, check.names = FALSE, sep = "\t", header = TRUE)
 
+# Create column source to match merged_msms
+msms_tsv$source <- paste0(msms_tsv$`raw file`,"_",msms_tsv$scan)
+
+# Copy information fragmentation details to merged_msms. Select columns of interest
+desired_cols <- c("spectrum fragmentation", "fragmentation energy (ETD)",
+                  "fragmentation energy (HCD)", "precursor m/z", "precursor charge",
+                  "PSM score", "peptide sequence")
+
+# Join into merged_msms by matching source == raw
+merged_msms <- merged_msms %>%
+  left_join(
+    msms_tsv %>%
+      select(any_of(c("source", desired_cols))) %>%
+      distinct(`source`, .keep_all = TRUE),   
+    by = c("source" = "source")
+  )
+
+# Summarise intensity
+summary_msms <- merged_msms %>%
+  group_by(
+    `spectrum fragmentation`,
+    `fragmentation energy (ETD)`,
+    `fragmentation energy (HCD)`,
+    `ion type`,
+    `precursor charge`,
+  ) %>%
+  summarise(
+    sum_intensity    = sum(intensity, na.rm = TRUE),
+    mean_intensity   = mean(intensity, na.rm = TRUE),
+    median_intensity = median(intensity, na.rm = TRUE),
+    sd_intensity     = sd(intensity, na.rm = TRUE),
+    n                = sum(!is.na(intensity)),
+    mean_score       = mean(`PSM score`, na.rm = TRUE),
+    sd_score         = sd(`PSM score`, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Summarise score
+summary_score <- merged_msms %>%
+  group_by(
+    `spectrum fragmentation`,
+    `fragmentation energy (ETD)`,
+    `fragmentation energy (HCD)`,
+    `precursor charge`,
+  ) %>%
+  summarise(
+    n                = sum(!is.na(intensity)),
+    mean_score       = mean(`PSM score`, na.rm = TRUE),
+    sd_score         = sd(`PSM score`, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+## Plots----
+
+# Define colours for each ion type
+ion_palette <- c(
+  "b" = "darkblue",
+  "y" = "red",
+  "c" = "black",
+  "z" = "darkgrey",
+  "Precursor" = "darkgreen",
+  "Diagnostic" = "yellow3"
+)
+
+# Define ion types per fragmentation method
+ETD <- c("c", "z", "Precursor", "Diagnostic")
+HCD <- c("b", "y", "Precursor", "Diagnostic")
+EThcD <- c("c", "z", "c", "z", "Precursor", "Diagnostic")
 
 
-# Define ion series to be extracted from dfs
-series <- c("b", "y", "z", "c", "Precursor", "Diagnostic")
+## ETD----
+# subset ETD data
+temp <- summary_msms %>%
+  filter(`spectrum fragmentation` == "ETD") %>%
+  mutate(
+    `fragmentation energy (ETD)` = suppressWarnings(as.numeric(`fragmentation energy (ETD)`))
+  ) %>%
+  filter(!is.na(`fragmentation energy (ETD)`), mean_intensity > 0)
+         
+# Keep only ions from ETD series
+temp <- temp %>%
+  dplyr::filter(`ion type` %in% ETD)
+
+# Add standard deviation
+temp <- temp %>%
+  dplyr::mutate(
+    ymin = log10(mean_intensity - sd_intensity),
+    ymax = log10(mean_intensity + sd_intensity),
+    y    = log10(mean_intensity)
+  )
+
+# ggplot
+etd <- ggplot(
+  temp,
+  aes(x = `fragmentation energy (ETD)`,
+      y = log10(mean_intensity),
+      color = `ion type`,
+      group = `ion type`)
+) +
+  geom_line() +
+  geom_point(size = 1.8) +
+  facet_wrap(~ `precursor charge`, scales = "free_x") +
+  scale_color_manual(
+    values = ion_palette,
+    limits = ETD   # only use colors for the selected ions, in this order
+  ) +
+  labs(
+    title = "MS/MS ion series per ETD reaction time",
+    x = "ETD reaction time (ms)",
+    y = "Log10-average intensity",
+    color = "Ion series"
+  ) +
+  theme_minimal() +
+  theme(panel.grid.minor = element_blank())
+
+etd
+
+etd +
+  # SD ribbon
+  ggplot2::geom_ribbon(
+    aes(ymin = ymin, ymax = ymax, fill = `ion type`, color = NULL),
+    alpha = 0.05,
+    linewidth = 0,
+    show.legend = FALSE
+  ) +
+  # Reapply manual colors and optionally sync fill to the same palette
+  ggplot2::scale_color_manual(values = ion_palette, limits = ETD) +
+  ggplot2::scale_fill_manual(values = ion_palette, limits = ETD)
+
+# Optional: add scores
+score_etd <- summary_score %>%
+  filter(`spectrum fragmentation` == "ETD") %>%
+  mutate(`fragmentation energy (ETD)` = suppressWarnings(as.numeric(`fragmentation energy (ETD)`))) %>%
+  filter(!is.na(`fragmentation energy (ETD)`))
+
+# Compute primary Y range from your plotted data (log10(mean_intensity))
+temp <- temp %>%
+  mutate(y = log10(mean_intensity))
+
+y_min <- min(temp$y, na.rm = TRUE)
+y_max <- max(temp$y, na.rm = TRUE)
+
+# Linear mapping between left-axis y and right-axis score (0..300)
+to_score <- function(y) (y - y_min) * 300 / (y_max - y_min)          # left -> right (labels)
+to_y     <- function(s) (s / 300) * (y_max - y_min) + y_min          # right -> left (plotting)
+
+etd +
+  # --- PSM score SD ribbon (mapped to left axis, no legend) ---
+  geom_ribbon(
+    data = score_etd %>%
+      mutate(
+        ymin = to_y(pmax(mean_score - sd_score, 0)),
+        ymax = to_y(pmin(mean_score + sd_score, 300))
+      ),
+    aes(x = `fragmentation energy (ETD)`, ymin = ymin, ymax = ymax, group = 1),
+    inherit.aes = FALSE, fill = "grey50", alpha = 0.15, linewidth = 0,
+    show.legend = FALSE
+  ) +
+  
+  # --- PSM score mean (dashed; no legend) ---
+  geom_line(
+    data = score_etd %>% mutate(y = to_y(pmin(pmax(mean_score, 0), 300))),
+    aes(x = `fragmentation energy (ETD)`, y = y, group = 1),
+    inherit.aes = FALSE, color = "grey20", linewidth = 0.7, linetype = "dashed",
+    show.legend = FALSE
+  ) +
+  
+  # --- Secondary axis with 0..300 labeling ---
+  scale_y_continuous(
+    name = "Log10-average intensity",
+    sec.axis = sec_axis(~ to_score(.), name = "PSM score")
+  )
+
+## HCD----
+# subset data
+temp <- summary_msms %>%
+  filter(`spectrum fragmentation` == "HCD") %>%
+  mutate(
+    `fragmentation energy (HCD)` = suppressWarnings(as.numeric(`fragmentation energy (HCD)`))
+  ) %>%
+  filter(!is.na(`fragmentation energy (HCD)`), mean_intensity > 0)
+
+# Keep only ions from HCD series
+temp <- temp %>%
+  dplyr::filter(`ion type` %in% HCD)
+
+# Add standard deviation
+temp <- temp %>%
+  dplyr::mutate(
+    ymin = log10(mean_intensity - sd_intensity),
+    ymax = log10(mean_intensity + sd_intensity),
+    y    = log10(mean_intensity)
+  )
+
+# ggplot
+hcd <- ggplot(
+  temp,
+  aes(x = `fragmentation energy (HCD)`,
+      y = log10(mean_intensity),
+      color = `ion type`,
+      group = `ion type`)
+) +
+  geom_line() +
+  geom_point(size = 1.8) +
+  facet_wrap(~ `precursor charge`, scales = "free_x") +
+  scale_color_manual(
+    values = ion_palette,
+    limits = HCD   # only use colors for the selected ions, in this order
+  ) +
+  labs(
+    title = "MS/MS ion series per NCE",
+    x = "Normalised Collision Energy (NCE)",
+    y = "Log10-average intensity",
+    color = "Ion series"
+  ) +
+  theme_minimal() +
+  theme(panel.grid.minor = element_blank())
+
+hcd
+
+hcd +
+  # SD ribbon
+  ggplot2::geom_ribbon(
+    aes(ymin = ymin, ymax = ymax, fill = `ion type`, color = NULL),
+    alpha = 0.05,
+    linewidth = 0,
+    show.legend = FALSE
+  ) +
+  # Reapply manual colors and optionally sync fill to the same palette
+  ggplot2::scale_color_manual(values = ion_palette, limits = HCD) +
+  ggplot2::scale_fill_manual(values = ion_palette, limits = HCD)
+
+# Optional: add scores
+score_hcd <- summary_score %>%
+  filter(`spectrum fragmentation` == "HCD") %>%
+  mutate(`fragmentation energy (HCD)` = suppressWarnings(as.numeric(`fragmentation energy (HCD)`))) %>%
+  filter(!is.na(`fragmentation energy (HCD)`))
+
+# Compute primary Y range from your plotted data (log10(mean_intensity))
+temp <- temp %>%
+  mutate(y = log10(mean_intensity))
+
+y_min <- min(temp$y, na.rm = TRUE)
+y_max <- max(temp$y, na.rm = TRUE)
+
+# Linear mapping between left-axis y and right-axis score (0..300)
+to_score <- function(y) (y - y_min) * 300 / (y_max - y_min)          # left -> right (labels)
+to_y     <- function(s) (s / 300) * (y_max - y_min) + y_min          # right -> left (plotting)
+
+hcd +
+  # --- PSM score SD ribbon (mapped to left axis, no legend) ---
+  geom_ribbon(
+    data = score_hcd %>%
+      mutate(
+        ymin = to_y(pmax(mean_score - sd_score, 0)),
+        ymax = to_y(pmin(mean_score + sd_score, 300))
+      ),
+    aes(x = `fragmentation energy (HCD)`, ymin = ymin, ymax = ymax, group = 1),
+    inherit.aes = FALSE, fill = "grey50", alpha = 0.15, linewidth = 0,
+    show.legend = FALSE
+  ) +
+  
+  # --- PSM score mean (dashed; no legend) ---
+  geom_line(
+    data = score_hcd %>% mutate(y = to_y(pmin(pmax(mean_score, 0), 300))),
+    aes(x = `fragmentation energy (HCD)`, y = y, group = 1),
+    inherit.aes = FALSE, color = "grey20", linewidth = 0.7, linetype = "dashed",
+    show.legend = TRUE
+  ) +
+  
+  # --- Secondary axis with 0..300 labeling ---
+  scale_y_continuous(
+    name = "Log10-average intensity",
+    sec.axis = sec_axis(~ to_score(.), name = "PSM score")
+  )
+
+
+## EThcD----
+# subset data
+temp <- summary_msms %>%
+  filter(`spectrum fragmentation` == "EThcD") %>%
+  mutate(
+    `fragmentation energy (ETD)` = suppressWarnings(as.numeric(`fragmentation energy (ETD)`)),
+    `fragmentation energy (HCD)` = suppressWarnings(as.numeric(`fragmentation energy (HCD)`))
+  ) %>%
+  filter(!is.na(`fragmentation energy (ETD)`), mean_intensity > 0)
+
+# Keep only ions from EThcD series
+temp <- temp %>%
+  dplyr::filter(`ion type` %in% EThcD)
+
+# Add standard deviation
+temp <- temp %>%
+  dplyr::mutate(
+    ymin = log10(mean_intensity - sd_intensity),
+    ymax = log10(mean_intensity + sd_intensity),
+    y    = log10(mean_intensity)
+  )
+
+#temp$EThcD <- paste0(temp$`fragmentation energy (ETD)`,"_",temp$`fragmentation energy (HCD)`)
+temp$EThcD <- paste0(temp$`fragmentation energy (HCD)`,"_",temp$`fragmentation energy (ETD)`)
+
+# Define X axis group order
+temp <- temp %>%
+  mutate(EThcD = factor(EThcD, levels = c("15_50","25_50","35_50","15_100","25_100",
+                                          "35_100","15_150","25_150","35_150","15_200",
+                                          "25_200","35_200","15_250","25_250","35_250",
+                                          "15_300","25_300","35_300")))
+# ggplot
+ethcd <- ggplot(
+  temp,
+  aes(x = `EThcD`,
+      y = log10(mean_intensity),
+      color = `ion type`,
+      group = `ion type`)
+) +
+  geom_line() +
+  geom_point(size = 1.8) +
+  facet_wrap(~ `precursor charge`, scales = "free_x") +
+  scale_color_manual(
+    values = ion_palette,
+    limits = EThcD   # only use colors for the selected ions, in this order
+  ) +
+  labs(
+    title = "MS/MS ion series per ETD reaction time and HCD NCE",
+    x = "ETD reaction time (ms) & % NCE",
+    y = "Log10-average intensity",
+    color = "Ion series"
+  ) +
+  theme_minimal() +
+  theme(panel.grid.minor = element_blank())
+
+ethcd
+
+ethcd +
+  # SD ribbon
+  ggplot2::geom_ribbon(
+    aes(ymin = ymin, ymax = ymax, fill = `ion type`, color = NULL),
+    alpha = 0.05,
+    linewidth = 0,
+    show.legend = FALSE
+  ) +
+  # Reapply manual colors and optionally sync fill to the same palette
+  ggplot2::scale_color_manual(values = ion_palette, limits = EThcD) +
+  ggplot2::scale_fill_manual(values = ion_palette, limits = EThcD)
+
+# Optional: add scores
+# Create EThcD column in summary_score
+summary_score$EThcD <- paste0(summary_score$`fragmentation energy (HCD)`,"_",summary_score$`fragmentation energy (ETD)`)
+
+score_ethcd <- summary_score %>%
+  filter(`spectrum fragmentation` == "EThcD") %>%
+  filter(!is.na(`EThcD`))
+
+# Compute primary Y range from your plotted data (log10(mean_intensity))
+temp <- temp %>%
+  mutate(y = log10(mean_intensity))
+
+y_min <- min(temp$y, na.rm = TRUE)
+y_max <- max(temp$y, na.rm = TRUE)
+
+# Linear mapping between left-axis y and right-axis score (0..300)
+to_score <- function(y) (y - y_min) * 300 / (y_max - y_min)          # left -> right (labels)
+to_y     <- function(s) (s / 300) * (y_max - y_min) + y_min          # right -> left (plotting)
+
+ethcd +
+  # --- PSM score SD ribbon (mapped to left axis, no legend) ---
+  geom_ribbon(
+    data = score_ethcd %>%
+      mutate(
+        ymin = to_y(pmax(mean_score - sd_score, 0)),
+        ymax = to_y(pmin(mean_score + sd_score, 300))
+      ),
+    aes(x = `EThcD`, ymin = ymin, ymax = ymax, group = 1),
+    inherit.aes = FALSE, fill = "grey50", alpha = 0.15, linewidth = 0,
+    show.legend = FALSE
+  ) +
+  
+  # --- PSM score mean (dashed; no legend) ---
+  geom_line(
+    data = score_ethcd %>% mutate(y = to_y(pmin(pmax(mean_score, 0), 300))),
+    aes(x = `EThcD`, y = y, group = 1),
+    inherit.aes = FALSE, color = "grey20", linewidth = 0.7, linetype = "dashed",
+    show.legend = FALSE
+  ) +
+  
+  # --- Secondary axis with 0..300 labeling ---
+  scale_y_continuous(
+    name = "Log10-average intensity",
+    sec.axis = sec_axis(~ to_score(.), name = "PSM score")
+  )
+
+
+
+
+ethcd
 
 
 
