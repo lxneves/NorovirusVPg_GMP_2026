@@ -112,7 +112,7 @@ ion_palette <- c(
 # Define ion types per fragmentation method
 ETD <- c("c", "z", "Precursor", "Diagnostic")
 HCD <- c("b", "y", "Precursor", "Diagnostic")
-EThcD <- c("c", "z", "c", "z", "Precursor", "Diagnostic")
+EThcD <- c("c", "z", "b", "y", "Precursor", "Diagnostic")
 
 summary_msms$`precursor charge` <- gsub("2","Charge 2+",summary_msms$`precursor charge`)
 summary_msms$`precursor charge` <- gsub("3","Charge 3+",summary_msms$`precursor charge`)
@@ -354,7 +354,7 @@ ethcd +
     show.legend = FALSE
   )
 
-ggsave(plot = last_plot(), filename = paste0(path_fig,"EThcD_sd.svg"),
+ggsave(plot = last_plot(), filename = paste0(path_fig,"EThcD_sd2.svg"),
        dpi = 300, width = 200, height = 100, units = "mm", bg = "white")
 
 
