@@ -313,17 +313,17 @@ ggsave(plot = last_plot(), filename = paste0(path_fig,"EThcD_sd2.svg"),
        dpi = 300, width = 200, height = 100, units = "mm", bg = "white")
 
 ## Write .csv----
-write.table(summary_score, "C:/Users/leandro/OneDrive - The University of Liverpool/Experiments/Nucleotidylation/2026_Dimitri/VPg_synthetic_GMP/summary_score.csv",
+write.table(summary_score, "./summary_score.csv",
             sep = ",", quote = FALSE, row.names = FALSE)
 
-write.table(msms_tsv, "C:/Users/leandro/OneDrive - The University of Liverpool/Experiments/Nucleotidylation/2026_Dimitri/VPg_synthetic_GMP/RAW_files.csv",
+write.table(msms_tsv, "./RAW_files.csv",
             sep = ",", quote = FALSE, row.names = FALSE)
 
-write.table(msms_tsv, "C:/Users/leandro/OneDrive - The University of Liverpool/Experiments/Nucleotidylation/2026_Dimitri/VPg_synthetic_GMP/RAW_files.csv",
+write.table(merged_msms, "./summary_msms.csv",
             sep = ",", quote = FALSE, row.names = FALSE)
 
 
-# PRM quant in infected BV-2 cells----
+# PRM in  MNV-infected BV-2 cells----
 
 # Load Skyline results
 prm <- read.csv("Y:/Leandro/2025/Nucleotidylation/Skyline/LN_Precursor_Quant_MS1_MS2.csv",
