@@ -165,7 +165,7 @@ etd <- ggplot(
   theme_classic() +
   theme(panel.grid.minor = element_blank()) + scale_x_continuous(breaks = c(50, 100, 150, 200, 250, 300))
 
-#SD bars
+# SD bars
 etd +
   geom_errorbar(
     aes(ymin = ymin, ymax = ymax),
@@ -177,51 +177,6 @@ etd +
 
 ggsave(plot = last_plot(), filename = paste0(path_fig,"ETD_sd.svg"),
        dpi = 300, width = 110, height = 100, units = "mm", bg = "white")
-
-# Optional: add scores
-score_etd <- summary_score %>%
-  filter(`spectrum fragmentation` == "ETD") %>%
-  mutate(`fragmentation energy (ETD)` = suppressWarnings(as.numeric(`fragmentation energy (ETD)`))) %>%
-  filter(!is.na(`fragmentation energy (ETD)`))
-
-# Compute primary Y range from your plotted data (log10(mean_intensity))
-temp <- temp %>%
-  mutate(y = log10(mean_intensity))
-
-y_min <- min(temp$y, na.rm = TRUE)
-y_max <- max(temp$y, na.rm = TRUE)
-
-# Linear mapping between left-axis y and right-axis score (0..300)
-to_score <- function(y) (y - y_min) * 250 / (y_max - y_min)          # left -> right (labels)
-to_y     <- function(s) (s / 250) * (y_max - y_min) + y_min          # right -> left (plotting)
-
-etd +
-  # --- PSM score SD ribbon (mapped to left axis, no legend) ---
-  geom_ribbon(
-    data = score_etd %>%
-      mutate(
-        ymin = to_y(pmax(mean_score - sd_score, 0)),
-        ymax = to_y(pmin(mean_score + sd_score, 250))
-      ),
-    aes(x = `fragmentation energy (ETD)`, ymin = ymin, ymax = ymax, group = 1),
-    inherit.aes = FALSE, fill = "orange", alpha = 0.1, linewidth = 0,
-    show.legend = FALSE
-  ) +
-  
-  # --- PSM score mean (dashed; no legend) ---
-  geom_line(
-    data = score_etd %>% mutate(y = to_y(pmin(pmax(mean_score, 0), 250))),
-    aes(x = `fragmentation energy (ETD)`, y = y, group = 1),
-    inherit.aes = FALSE, color = "red4", linewidth = 1, linetype = "dashed",
-    show.legend = FALSE
-  ) +
-  
-  # --- Secondary axis with 0..250 labeling ---
-  scale_y_continuous(
-    name = "Log10-average intensity",
-    sec.axis = sec_axis(~ to_score(.), name = "PSM score")
-  )
-
 
 ### HCD----
 # subset data
@@ -357,13 +312,18 @@ ethcd +
 ggsave(plot = last_plot(), filename = paste0(path_fig,"EThcD_sd2.svg"),
        dpi = 300, width = 200, height = 100, units = "mm", bg = "white")
 
-## Scores----
-summary_score$EThcD <- paste0(summary_score$`fragmentation energy (HCD)`,"_",summary_score$`fragmentation energy (ETD)`)
+## Write .csv----
+write.table(summary_score, "C:/Users/leandro/OneDrive - The University of Liverpool/Experiments/Nucleotidylation/2026_Dimitri/VPg_synthetic_GMP/summary_score.csv",
+            sep = ",", quote = FALSE, row.names = FALSE)
 
-head(summary_score)
+write.table(msms_tsv, "C:/Users/leandro/OneDrive - The University of Liverpool/Experiments/Nucleotidylation/2026_Dimitri/VPg_synthetic_GMP/RAW_files.csv",
+            sep = ",", quote = FALSE, row.names = FALSE)
+
+write.table(msms_tsv, "C:/Users/leandro/OneDrive - The University of Liverpool/Experiments/Nucleotidylation/2026_Dimitri/VPg_synthetic_GMP/RAW_files.csv",
+            sep = ",", quote = FALSE, row.names = FALSE)
 
 
-# PRM-based quant in infected BV2 cells----
+# PRM quant in infected BV-2 cells----
 
 # Load Skyline results
 prm <- read.csv("Y:/Leandro/2025/Nucleotidylation/Skyline/LN_Precursor_Quant_MS1_MS2.csv",
