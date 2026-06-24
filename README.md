@@ -1,5 +1,5 @@
 # Summary
-Repository with scripts for the analysis of LC-MS/MS data generated for the manuscript **Synthesis of guanylylated peptides derived from norovirus VPg as molecular tools for studying norovirus replication** by *Puffelen B van & *Leandro X Neves, _et al._ (2026). 
+Repository with scripts for the analysis of LC-MS/MS data generated for the manuscript **Synthesis of guanylylated peptides derived from norovirus VPg as molecular tools for studying norovirus replication** by *Puffelen B van & *Neves, L X. _et al._ (2026). 
 
 > *authors contributed equally to this work.
 
