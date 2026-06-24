@@ -12,7 +12,7 @@ library(tidyr)
 
 # Define directory
 path_fig <- "Y:/Leandro/2025/Nucleotidylation/"
-path_exports <- "Y:/Leandro/2025/Nucleotidylation/Synthetic_peptides/AnnotatedSpectra/exports"
+path_exports <- "Y:/Leandro/2025/Nucleotidylation/Manuscript_2026/AnnotatedSpectra/exports"
 
 
 # HCD, ETD & EThcD optimisation----
@@ -42,7 +42,7 @@ merged_msms <- msms_list %>%
   bind_rows()
 
 # Load up the Spectra_meta.tsv. This contains spectrum scores and summary of dissociation conditions
-msms_tsv <- read.table("Y:/Leandro/2025/Nucleotidylation/Synthetic_peptides/AnnotatedSpectra/exports/Spectra_meta.tsv",
+msms_tsv <- read.table("Y:/Leandro/2025/Nucleotidylation/Manuscript_2026/AnnotatedSpectra/exports/Spectra_meta.tsv",
                        quote = NULL, check.names = FALSE, sep = "\t", header = TRUE)
 
 # Create column source to match merged_msms
@@ -98,7 +98,6 @@ summary_score <- merged_msms %>%
   )
 
 ## Plots----
-
 # Define colours for each ion type
 ion_palette <- c(
   "b" = "darkblue",
@@ -175,7 +174,7 @@ etd +
     show.legend = FALSE
   )
 
-ggsave(plot = last_plot(), filename = paste0(path_fig,"ETD_sd.svg"),
+ggsave(plot = last_plot(), filename = paste0("./ETD_sd.svg"),
        dpi = 300, width = 110, height = 100, units = "mm", bg = "white")
 
 ### HCD----
@@ -238,7 +237,7 @@ hcd +
     show.legend = FALSE
   )
 
-ggsave(plot = last_plot(), filename = paste0(path_fig,"HCD_sd.svg"),
+ggsave(plot = last_plot(), filename = paste0("./HCD_sd.svg"),
        dpi = 300, width = 110, height = 100, units = "mm", bg = "white")
 
 
@@ -309,7 +308,7 @@ ethcd +
     show.legend = FALSE
   )
 
-ggsave(plot = last_plot(), filename = paste0(path_fig,"EThcD_sd2.svg"),
+ggsave(plot = last_plot(), filename = paste0("./EThcD_sd2.svg"),
        dpi = 300, width = 200, height = 100, units = "mm", bg = "white")
 
 ## Write .csv----
@@ -326,7 +325,7 @@ write.table(merged_msms, "./summary_msms.csv",
 # PRM in  MNV-infected BV-2 cells----
 
 # Load Skyline results
-prm <- read.csv("Y:/Leandro/2025/Nucleotidylation/Skyline/LN_Precursor_Quant_MS1_MS2.csv",
+prm <- read.csv("Y:/Leandro/2025/Nucleotidylation/Manuscript_2026/Skyline/LN_Precursor_Quant_MS1_MS2.csv",
                 check.names = FALSE)
 
 # Remove rows of test injection with synthetic peptide standards
@@ -408,7 +407,7 @@ ggplot(prm, aes(x = Group, y = `Total Area Fragment`,
         legend.title = element_blank(),
         panel.grid.major.x = element_blank()) 
   
-ggsave(plot = last_plot(), filename = paste0(path_fig,"PRM_boxplot.svg"),
+ggsave(plot = last_plot(), filename = paste0("./PRM_boxplot.svg"),
        dpi = 300, width = 70, height = 70, units = "mm", bg = "white")
 
 ## Occupancy----
@@ -440,3 +439,11 @@ occupancy_summary <- occupancy_df %>%
     mean_occupancy = round(mean(occupancy, na.rm = TRUE),2),
     sd_occupancy   = round(sd(occupancy, na.rm = TRUE),2),
     n              = sum(!is.na(occupancy)))
+
+# Check statistical differences where n = 3, i.e MNV 8 hpi vs MNV 12 hpi
+test_diff <- occupancy_df %>%
+  filter(Group %in% c("MNV 8 hpi", "MNV 12 hpi"))
+
+t.test(occupancy ~ Group,
+       data = test_diff,
+       var.equal = FALSE)
